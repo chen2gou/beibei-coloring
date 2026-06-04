@@ -5,7 +5,7 @@
  * @date 2026年6月3日
  */
 
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useGameStore } from '../stores/game'
 import { colors } from '../data/levels'
 
@@ -26,6 +26,15 @@ export function useCanvas(canvasRef) {
   const dragStartX = ref(0)
   const dragStartY = ref(0)
 
+  // 双指缩放状态
+  const isPinching = ref(false)
+  const pinchStartDistance = ref(0)
+  const pinchStartScale = ref(1)
+  const pinchStartOffsetX = ref(0)
+  const pinchStartOffsetY = ref(0)
+  const pinchCenterX = ref(0)
+  const pinchCenterY = ref(0)
+
   // 长按拖拽填色状态
   const isLongPressMode = ref(false)
   const longPressTimer = ref(null)
@@ -36,6 +45,26 @@ export function useCanvas(canvasRef) {
 
   // 完成回调
   let completionCallback = null
+
+  function getTouchDistance(touches) {
+    const dx = touches[0].clientX - touches[1].clientX
+    const dy = touches[0].clientY - touches[1].clientY
+    return Math.sqrt(dx * dx + dy * dy)
+  }
+
+  function getTouchCenter(touches) {
+    return {
+      x: (touches[0].clientX + touches[1].clientX) / 2,
+      y: (touches[0].clientY + touches[1].clientY) / 2
+    }
+  }
+
+  function clearLongPressTimer() {
+    if (longPressTimer.value) {
+      clearTimeout(longPressTimer.value)
+      longPressTimer.value = null
+    }
+  }
 
   // 设置完成回调
   function setCompletionCallback(callback) {
@@ -169,11 +198,30 @@ export function useCanvas(canvasRef) {
     updateTransform()
   }
 
-  function resetZoom() {
-    scale.value = 1
-    offsetX.value = 0
-    offsetY.value = 0
+  function fitCanvasToContainer() {
+    if (!canvasRef.value) return
+
+    const canvas = canvasRef.value
+    const container = canvas.parentElement
+    if (!container) return
+
+    const padding = 32
+    const containerWidth = Math.max(container.clientWidth - padding * 2, 0)
+    const containerHeight = Math.max(container.clientHeight - padding * 2, 0)
+    const fitScale = Math.min(
+      containerWidth / canvas.width,
+      containerHeight / canvas.height,
+      1
+    )
+
+    scale.value = Math.max(fitScale, 0.35)
+    offsetX.value = Math.round((container.clientWidth - canvas.width * scale.value) / 2)
+    offsetY.value = Math.round((container.clientHeight - canvas.height * scale.value) / 2)
     updateTransform()
+  }
+
+  function resetZoom() {
+    fitCanvasToContainer()
   }
 
   function updateTransform() {
@@ -183,6 +231,25 @@ export function useCanvas(canvasRef) {
 
   // 拖拽功能
   function handleDragStart(e) {
+    if (e.type === 'touchstart' && e.touches.length >= 2) {
+      e.preventDefault()
+      clearLongPressTimer()
+
+      const center = getTouchCenter(e.touches)
+      isPinching.value = true
+      isDragging.value = false
+      hasDragged.value = true
+      isLongPressMode.value = false
+      paintedCells.value.clear()
+      pinchStartDistance.value = getTouchDistance(e.touches)
+      pinchStartScale.value = scale.value
+      pinchStartOffsetX.value = offsetX.value
+      pinchStartOffsetY.value = offsetY.value
+      pinchCenterX.value = center.x
+      pinchCenterY.value = center.y
+      return
+    }
+
     if (e.type === 'touchstart' && e.touches.length > 1) return
 
     isDragging.value = true
@@ -215,6 +282,25 @@ export function useCanvas(canvasRef) {
   }
 
   function handleDragMove(e) {
+    if (e.type.startsWith('touch') && e.touches.length >= 2) {
+      e.preventDefault()
+      if (!isPinching.value || !pinchStartDistance.value) return
+
+      const center = getTouchCenter(e.touches)
+      const nextScale = Math.max(
+        0.35,
+        Math.min(pinchStartScale.value * (getTouchDistance(e.touches) / pinchStartDistance.value), 5)
+      )
+      const canvasX = (pinchCenterX.value - pinchStartOffsetX.value) / pinchStartScale.value
+      const canvasY = (pinchCenterY.value - pinchStartOffsetY.value) / pinchStartScale.value
+
+      scale.value = nextScale
+      offsetX.value = center.x - canvasX * nextScale
+      offsetY.value = center.y - canvasY * nextScale
+      updateTransform()
+      return
+    }
+
     if (!isDragging.value) return
 
     const clientX = e.type.startsWith('touch') ? e.touches[0].clientX : e.clientX
@@ -254,11 +340,22 @@ export function useCanvas(canvasRef) {
   }
 
   function handleDragEnd() {
-    // 清除长按定时器
-    if (longPressTimer.value) {
-      clearTimeout(longPressTimer.value)
-      longPressTimer.value = null
+    if (isPinching.value) {
+      isPinching.value = false
+      isDragging.value = false
+      isLongPressMode.value = false
+      paintedCells.value.clear()
+      clearLongPressTimer()
+      if (canvasRef.value) {
+        canvasRef.value.style.cursor = 'pointer'
+      }
+      setTimeout(() => {
+        hasDragged.value = false
+      }, 50)
+      return
     }
+
+    clearLongPressTimer()
 
     // 如果在填色模式，清除画笔光标
     if (isLongPressMode.value) {
@@ -325,6 +422,22 @@ export function useCanvas(canvasRef) {
     })
   }
 
+  function handleResize() {
+    if (canvasRef.value) {
+      fitCanvasToContainer()
+    }
+  }
+
+  onMounted(() => {
+    window.addEventListener('resize', handleResize)
+    window.addEventListener('orientationchange', handleResize)
+  })
+
+  onUnmounted(() => {
+    window.removeEventListener('resize', handleResize)
+    window.removeEventListener('orientationchange', handleResize)
+  })
+
   // 监听当前数字变化，重绘网格
   watch(() => gameStore.currentNumber, () => {
     drawGrid()
@@ -340,6 +453,9 @@ export function useCanvas(canvasRef) {
     zoomIn,
     zoomOut,
     resetZoom,
+    fitCanvasToContainer,
+    isPinching,
+    hasDragged,
     checkProgress,
     setCompletionCallback
   }

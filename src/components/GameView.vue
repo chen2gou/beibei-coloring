@@ -1,9 +1,15 @@
 <template>
   <PxContainer class="game-view">
     <PxHeader bordered dark class="game-header">
-      <PxButton variant="outline" size="medium" @click="gameStore.backToLevelSelector()">
-        ← 返回
-      </PxButton>
+      <div class="header-actions">
+        <PxButton variant="outline" size="medium" @click="gameStore.backToLevelSelector()">
+          ← 返回
+        </PxButton>
+
+        <PxButton theme="danger" variant="outline" size="medium" @click="resetLevel()">
+          重置
+        </PxButton>
+      </div>
 
       <div class="current-color">
         <PxTag theme="primary" variant="plain">当前数字</PxTag>
@@ -23,10 +29,6 @@
           <span class="progress-text">{{ filledCurrent }}/{{ totalCurrent }}</span>
         </div>
       </div>
-
-      <PxButton theme="danger" variant="outline" size="medium" @click="resetLevel()">
-        重置
-      </PxButton>
     </PxHeader>
 
     <PxMain class="canvas-container" ref="containerRef">
@@ -60,7 +62,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
 import { useGameStore } from '../stores/game'
 import { useCanvas } from '../composables/useCanvas'
 import { colors } from '../data/levels'
@@ -107,7 +109,7 @@ function handleTouchStart(e) {
 }
 
 function handleTouchEnd(e) {
-  if (!canvasLogic.hasDragged) {
+  if (!canvasLogic.hasDragged && !canvasLogic.isPinching.value) {
     canvasLogic.handleCellClick(e)
   }
   canvasLogic.handleDragEnd()
@@ -131,14 +133,18 @@ function showCompletion() {
   showCompletionModal.value = true
 }
 
-onMounted(() => {
+onMounted(async () => {
   canvasLogic.initCanvas()
   canvasLogic.setCompletionCallback(showCompletion)
+  await nextTick()
+  canvasLogic.fitCanvasToContainer()
 })
 
-watch(() => gameStore.currentLevelId, () => {
+watch(() => gameStore.currentLevelId, async () => {
   if (gameStore.currentLevelId) {
     canvasLogic.initCanvas()
+    await nextTick()
+    canvasLogic.fitCanvasToContainer()
   }
 })
 </script>
@@ -157,14 +163,27 @@ watch(() => gameStore.currentLevelId, () => {
 .game-header {
   min-height: 88px;
   padding: 14px 20px;
-  display: flex;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: auto minmax(360px, 1fr) auto;
   align-items: center;
-  flex-wrap: wrap;
   gap: 12px;
 }
 
+.header-actions {
+  display: contents;
+}
+
+.header-actions > :first-child {
+  grid-column: 1;
+}
+
+.header-actions > :last-child {
+  grid-column: 3;
+  justify-self: end;
+}
+
 .current-color {
+  grid-column: 2;
   min-width: 360px;
   padding: 10px 14px;
   border: 4px solid #2a2042;
@@ -229,17 +248,35 @@ canvas {
 
 @media (max-width: 768px) {
   .game-header {
-    align-items: stretch;
+    min-height: 168px;
+    grid-template-columns: 1fr 1fr;
+    align-items: center;
+  }
+
+  .header-actions {
+    display: contents;
+  }
+
+  .header-actions > :first-child {
+    grid-column: 1;
+    justify-self: start;
+  }
+
+  .header-actions > :last-child {
+    grid-column: 2;
+    justify-self: end;
   }
 
   .current-color {
+    grid-column: 1 / -1;
     min-width: 100%;
     justify-content: center;
     flex-wrap: wrap;
   }
 
   .canvas-container {
-    height: calc(100vh - 180px);
+    height: calc(100vh - 168px);
+    height: calc(100dvh - 168px);
   }
 }
 </style>
