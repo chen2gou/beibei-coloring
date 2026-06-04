@@ -8,9 +8,24 @@
         <PxTag theme="sakura" variant="plain" size="small">Pixel Color Quest</PxTag>
       </div>
 
-      <PxButton theme="danger" variant="outline" size="medium" @click="gameStore.resetGame()">
-        重置进度
-      </PxButton>
+      <PxSpace margin="small" :wrap="true" class="header-buttons">
+        <PxButton
+          theme="info"
+          variant="outline"
+          shape="square"
+          size="medium"
+          :aria-label="bgm.enabled.value ? '关闭背景音乐' : '开启背景音乐'"
+          @click="bgm.toggleBgm()"
+        >
+          <template #icon>
+            <IconSoundOn v-if="bgm.enabled.value" />
+            <IconSoundMute v-else />
+          </template>
+        </PxButton>
+        <PxButton theme="danger" variant="outline" size="medium" @click="gameStore.resetGame()">
+          重置进度
+        </PxButton>
+      </PxSpace>
     </PxHeader>
 
     <PxMain soft class="selector-main">
@@ -72,8 +87,12 @@
 </template>
 
 <script setup>
+import { inject } from 'vue'
+import { IconSoundMute, IconSoundOn } from '@pixelium/web-vue/icon-hn/es'
 import { useGameStore } from '../stores/game'
 import { levels } from '../data/levels'
+
+const bgm = inject('bgm')
 
 const gameStore = useGameStore()
 
@@ -110,6 +129,10 @@ function handleLevelClick(level) {
   align-items: center;
   gap: 14px;
   flex-wrap: wrap;
+}
+
+.header-buttons {
+  flex-shrink: 0;
 }
 
 .title {

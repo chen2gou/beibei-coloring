@@ -2,7 +2,7 @@
   <PxContainer class="game-view">
     <PxHeader bordered dark class="game-header">
       <div class="header-actions">
-        <PxButton variant="outline" size="medium" @click="gameStore.backToLevelSelector()">
+        <PxButton variant="outline" size="medium" @click="backToLevelSelector">
           ← 返回
         </PxButton>
 
@@ -44,9 +44,27 @@
       ></canvas>
 
       <PxSpace margin="small" direction="vertical" class="zoom-controls">
-        <PxButton shape="circle" size="large" variant="plain" @click="canvasLogic.zoomIn()">+</PxButton>
-        <PxButton shape="circle" size="large" variant="plain" @click="canvasLogic.zoomOut()">−</PxButton>
-        <PxButton shape="circle" size="large" variant="plain" @click="canvasLogic.resetZoom()">⟲</PxButton>
+        <PxButton
+          shape="circle"
+          size="large"
+          variant="plain"
+          :aria-label="bgm.enabled.value ? '关闭背景音乐' : '开启背景音乐'"
+          @click="bgm.toggleBgm()"
+        >
+          <template #icon>
+            <IconSoundOn v-if="bgm.enabled.value" />
+            <IconSoundMute v-else />
+          </template>
+        </PxButton>
+        <PxButton shape="circle" size="large" variant="plain" aria-label="放大图案" @click="canvasLogic.zoomIn()">
+          <template #icon><IconPlus /></template>
+        </PxButton>
+        <PxButton shape="circle" size="large" variant="plain" aria-label="缩小图案" @click="canvasLogic.zoomOut()">
+          <template #icon><IconMinus /></template>
+        </PxButton>
+        <PxButton shape="circle" size="large" variant="plain" aria-label="重置视图" @click="canvasLogic.resetZoom()">
+          <template #icon><IconRefresh /></template>
+        </PxButton>
       </PxSpace>
     </PxMain>
 
@@ -56,13 +74,14 @@
       :hasNextLevel="hasNextLevel"
       @close="showCompletionModal = false"
       @nextLevel="handleNextLevel"
-      @backToLevels="gameStore.backToLevelSelector()"
+      @backToLevels="backToLevelSelector"
     />
   </PxContainer>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, watch, nextTick, inject } from 'vue'
+import { IconMinus, IconPlus, IconRefresh, IconSoundMute, IconSoundOn } from '@pixelium/web-vue/icon-hn/es'
 import { useGameStore } from '../stores/game'
 import { useCanvas } from '../composables/useCanvas'
 import { colors } from '../data/levels'
@@ -70,6 +89,7 @@ import { levels } from '../data/levels'
 import CompletionModal from './CompletionModal.vue'
 
 const gameStore = useGameStore()
+const bgm = inject('bgm')
 const canvasRef = ref(null)
 const containerRef = ref(null)
 const showCompletionModal = ref(false)
@@ -98,7 +118,7 @@ function handleMouseDown(e) {
 }
 
 function handleMouseUp(e) {
-  if (!canvasLogic.hasDragged) {
+  if (!canvasLogic.hasDragged.value) {
     canvasLogic.handleCellClick(e)
   }
   canvasLogic.handleDragEnd()
@@ -109,14 +129,20 @@ function handleTouchStart(e) {
 }
 
 function handleTouchEnd(e) {
-  if (!canvasLogic.hasDragged && !canvasLogic.isPinching.value) {
+  if (!canvasLogic.hasDragged.value && !canvasLogic.isPinching.value) {
     canvasLogic.handleCellClick(e)
   }
   canvasLogic.handleDragEnd()
 }
 
+function backToLevelSelector() {
+  bgm.stopBgm()
+  gameStore.backToLevelSelector()
+}
+
 function resetLevel() {
   if (confirm('确定要重置当前关卡吗？')) {
+    gameStore.clearLevelProgress(gameStore.currentLevelId)
     gameStore.initLevel()
     canvasLogic.drawGrid()
   }
@@ -163,27 +189,22 @@ watch(() => gameStore.currentLevelId, async () => {
 .game-header {
   min-height: 88px;
   padding: 14px 20px;
-  display: grid;
-  grid-template-columns: auto minmax(360px, 1fr) auto;
-  align-items: center;
-  gap: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 14px;
 }
 
 .header-actions {
-  display: contents;
-}
-
-.header-actions > :first-child {
-  grid-column: 1;
-}
-
-.header-actions > :last-child {
-  grid-column: 3;
-  justify-self: end;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
 .current-color {
-  grid-column: 2;
+  align-self: center;
   min-width: 360px;
   padding: 10px 14px;
   border: 4px solid #2a2042;
@@ -226,6 +247,7 @@ watch(() => gameStore.currentLevelId, async () => {
 
 .canvas-container {
   height: calc(100vh - 88px);
+  height: calc(100dvh - 88px);
   position: relative;
   overflow: hidden;
   background: #f7f1dc;
@@ -249,26 +271,14 @@ canvas {
 @media (max-width: 768px) {
   .game-header {
     min-height: 168px;
-    grid-template-columns: 1fr 1fr;
-    align-items: center;
+    align-items: stretch;
   }
 
   .header-actions {
-    display: contents;
-  }
-
-  .header-actions > :first-child {
-    grid-column: 1;
-    justify-self: start;
-  }
-
-  .header-actions > :last-child {
-    grid-column: 2;
-    justify-self: end;
+    justify-content: space-between;
   }
 
   .current-color {
-    grid-column: 1 / -1;
     min-width: 100%;
     justify-content: center;
     flex-wrap: wrap;

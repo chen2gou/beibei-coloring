@@ -18,6 +18,7 @@ export const useGameStore = defineStore('game', () => {
 
   // 已完成的关卡 ID 列表
   const completedLevels = ref([])
+  const levelProgress = ref({})
 
   // 当前游戏状态
   const currentNumber = ref(1)
@@ -31,6 +32,7 @@ export const useGameStore = defineStore('game', () => {
       try {
         const data = JSON.parse(saved)
         completedLevels.value = data.completedLevels || []
+        levelProgress.value = data.levelProgress || {}
       } catch (e) {
         console.error('加载进度失败:', e)
       }
@@ -40,9 +42,41 @@ export const useGameStore = defineStore('game', () => {
   // 保存进度到 localStorage
   function saveProgress() {
     const data = {
-      completedLevels: completedLevels.value
+      completedLevels: completedLevels.value,
+      levelProgress: levelProgress.value
     }
     localStorage.setItem('paint-by-numbers-progress', JSON.stringify(data))
+  }
+
+  function applyLevelProgress() {
+    if (!currentLevelId.value) return
+
+    const filledIndexes = levelProgress.value[currentLevelId.value] || []
+    const filledSet = new Set(filledIndexes)
+    filledCells.value = new Set()
+
+    grid.value.forEach((cell, index) => {
+      cell.filled = filledSet.has(index)
+      if (cell.filled) {
+        filledCells.value.add(cell)
+      }
+    })
+  }
+
+  function saveLevelProgress() {
+    if (!currentLevelId.value) return
+
+    levelProgress.value[currentLevelId.value] = grid.value
+      .map((cell, index) => cell.filled ? index : -1)
+      .filter(index => index >= 0)
+    saveProgress()
+  }
+
+  function clearLevelProgress(levelId = currentLevelId.value) {
+    if (!levelId) return
+
+    delete levelProgress.value[levelId]
+    saveProgress()
   }
 
   // 选择关卡
@@ -77,6 +111,7 @@ export const useGameStore = defineStore('game', () => {
 
     currentNumber.value = 1
     filledCells.value = new Set()
+    applyLevelProgress()
   }
 
   // 检查关卡是否解锁
@@ -102,6 +137,7 @@ export const useGameStore = defineStore('game', () => {
   function resetGame() {
     if (confirm('确定要重置所有进度吗？')) {
       completedLevels.value = []
+      levelProgress.value = {}
       currentLevelId.value = null
       localStorage.removeItem('paint-by-numbers-progress')
     }
@@ -119,12 +155,15 @@ export const useGameStore = defineStore('game', () => {
     grid,
     filledCells,
     completedLevels,
+    levelProgress,
     initProgress,
     selectLevel,
     initLevel,
     isLevelUnlocked,
     isLevelCompleted,
     completeLevel,
+    saveLevelProgress,
+    clearLevelProgress,
     resetGame,
     backToLevelSelector
   }

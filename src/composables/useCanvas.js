@@ -179,6 +179,7 @@ export function useCanvas(canvasRef) {
     if (clickedCell && clickedCell.number === gameStore.currentNumber) {
       clickedCell.filled = true
       gameStore.filledCells.add(clickedCell)
+      gameStore.saveLevelProgress()
       drawGrid()
       checkProgress()
     }
@@ -434,6 +435,8 @@ export function useCanvas(canvasRef) {
 
   // 填充画笔圈内的格子
   function fillCellsUnderBrush() {
+    let changed = false
+
     gameStore.grid.forEach((cell, index) => {
       if (cell.filled || paintedCells.value.has(index)) return
       if (cell.number !== gameStore.currentNumber) return
@@ -449,8 +452,13 @@ export function useCanvas(canvasRef) {
         cell.filled = true
         gameStore.filledCells.add(cell)
         paintedCells.value.add(index)
+        changed = true
       }
     })
+
+    if (changed) {
+      gameStore.saveLevelProgress()
+    }
   }
 
   function handleResize() {

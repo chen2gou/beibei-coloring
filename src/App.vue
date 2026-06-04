@@ -6,12 +6,16 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted, provide } from 'vue'
 import { useGameStore } from './stores/game'
+import { useBgm } from './composables/useBgm'
 import LevelSelector from './components/LevelSelector.vue'
 import GameView from './components/GameView.vue'
 
 const gameStore = useGameStore()
+const bgm = useBgm()
+
+provide('bgm', bgm)
 
 onMounted(() => {
   gameStore.initProgress()
