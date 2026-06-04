@@ -12,11 +12,15 @@ import { colors } from '../data/levels'
 export function useCanvas(canvasRef) {
   const gameStore = useGameStore()
 
+  const CANVAS_RENDER_SCALE = window.devicePixelRatio || 1
+
   // Canvas 状态
   const ctx = ref(null)
   const scale = ref(1)
   const offsetX = ref(0)
   const offsetY = ref(0)
+  const canvasWidth = ref(0)
+  const canvasHeight = ref(0)
 
   // 拖拽状态
   const isDragging = ref(false)
@@ -59,6 +63,18 @@ export function useCanvas(canvasRef) {
     }
   }
 
+  function getTouchCenterInContainer(touches) {
+    const center = getTouchCenter(touches)
+    const container = canvasRef.value?.parentElement
+    if (!container) return center
+
+    const rect = container.getBoundingClientRect()
+    return {
+      x: center.x - rect.left,
+      y: center.y - rect.top
+    }
+  }
+
   function clearLongPressTimer() {
     if (longPressTimer.value) {
       clearTimeout(longPressTimer.value)
@@ -79,9 +95,14 @@ export function useCanvas(canvasRef) {
     const level = gameStore.currentLevel
     if (!level) return
 
-    canvas.width = level.size * 40
-    canvas.height = level.data.length * 40
+    canvasWidth.value = level.size * 40
+    canvasHeight.value = level.data.length * 40
+    canvas.width = canvasWidth.value * CANVAS_RENDER_SCALE
+    canvas.height = canvasHeight.value * CANVAS_RENDER_SCALE
+    canvas.style.width = `${canvasWidth.value}px`
+    canvas.style.height = `${canvasHeight.value}px`
     ctx.value = canvas.getContext('2d')
+    ctx.value.setTransform(CANVAS_RENDER_SCALE, 0, 0, CANVAS_RENDER_SCALE, 0, 0)
 
     resetZoom()
     drawGrid()
@@ -92,7 +113,7 @@ export function useCanvas(canvasRef) {
     if (!ctx.value || !canvasRef.value) return
 
     const canvas = canvasRef.value
-    ctx.value.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.value.clearRect(0, 0, canvasWidth.value, canvasHeight.value)
 
     gameStore.grid.forEach((cell) => {
       if (cell.filled) {
@@ -209,14 +230,14 @@ export function useCanvas(canvasRef) {
     const containerWidth = Math.max(container.clientWidth - padding * 2, 0)
     const containerHeight = Math.max(container.clientHeight - padding * 2, 0)
     const fitScale = Math.min(
-      containerWidth / canvas.width,
-      containerHeight / canvas.height,
+      containerWidth / canvasWidth.value,
+      containerHeight / canvasHeight.value,
       1
     )
 
     scale.value = Math.max(fitScale, 0.35)
-    offsetX.value = Math.round((container.clientWidth - canvas.width * scale.value) / 2)
-    offsetY.value = Math.round((container.clientHeight - canvas.height * scale.value) / 2)
+    offsetX.value = Math.round((container.clientWidth - canvasWidth.value * scale.value) / 2)
+    offsetY.value = Math.round((container.clientHeight - canvasHeight.value * scale.value) / 2)
     updateTransform()
   }
 
@@ -226,7 +247,17 @@ export function useCanvas(canvasRef) {
 
   function updateTransform() {
     if (!canvasRef.value) return
-    canvasRef.value.style.transform = `translate(${offsetX.value}px, ${offsetY.value}px) scale(${scale.value})`
+
+    const displayWidth = canvasWidth.value * scale.value
+    const displayHeight = canvasHeight.value * scale.value
+    canvasRef.value.width = displayWidth * CANVAS_RENDER_SCALE
+    canvasRef.value.height = displayHeight * CANVAS_RENDER_SCALE
+    canvasRef.value.style.width = `${displayWidth}px`
+    canvasRef.value.style.height = `${displayHeight}px`
+    canvasRef.value.style.transform = `translate(${offsetX.value}px, ${offsetY.value}px)`
+    ctx.value = canvasRef.value.getContext('2d')
+    ctx.value.setTransform(scale.value * CANVAS_RENDER_SCALE, 0, 0, scale.value * CANVAS_RENDER_SCALE, 0, 0)
+    drawGrid()
   }
 
   // 拖拽功能
@@ -235,7 +266,7 @@ export function useCanvas(canvasRef) {
       e.preventDefault()
       clearLongPressTimer()
 
-      const center = getTouchCenter(e.touches)
+      const center = getTouchCenterInContainer(e.touches)
       isPinching.value = true
       isDragging.value = false
       hasDragged.value = true
@@ -286,7 +317,7 @@ export function useCanvas(canvasRef) {
       e.preventDefault()
       if (!isPinching.value || !pinchStartDistance.value) return
 
-      const center = getTouchCenter(e.touches)
+      const center = getTouchCenterInContainer(e.touches)
       const nextScale = Math.max(
         0.35,
         Math.min(pinchStartScale.value * (getTouchDistance(e.touches) / pinchStartDistance.value), 5)
